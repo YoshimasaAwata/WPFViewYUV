@@ -1,0 +1,12 @@
+LIBRARY "Direct3DYUV"
+
+EXPORTS
+
+SetSize
+SetAlpha
+SetNumDesiredSamples
+SetAdapter
+
+GetBackBufferNoRef
+Render
+Destroy
