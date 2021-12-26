@@ -195,6 +195,10 @@ namespace D3DHost
                     d3dimg2.AddDirtyRect(new Int32Rect(0, 0, d3dimg2.PixelWidth, d3dimg2.PixelHeight));
                     d3dimg2.Unlock();
                 }
+                else
+                {
+                    _playTimer.Stop();
+                }
             }
         }
 
@@ -256,6 +260,16 @@ namespace D3DHost
                 playbutton.IsEnabled = true;
                 CompositionTarget_Rendering2(sender, e);
             }
+        }
+
+        DispatcherTimer _playTimer;
+        private void playbutton_Click(object sender, RoutedEventArgs e)
+        {
+            playbutton.IsEnabled = false;
+            _playTimer = new DispatcherTimer();
+            _playTimer.Tick += new EventHandler(CompositionTarget_Rendering2);
+            _playTimer.Interval = new TimeSpan(0, 0, 0, 0, 33);
+            _playTimer.Start();
         }
     }
 
