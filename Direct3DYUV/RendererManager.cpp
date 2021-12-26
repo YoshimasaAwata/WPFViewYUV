@@ -19,7 +19,7 @@ typedef HRESULT(WINAPI* DIRECT3DCREATE9EXFUNCTION)(UINT SDKVersion, IDirect3D9Ex
 //      CRendererManager ctor
 //
 //------------------------------------------------------------------------------
-CRendererManager::CRendererManager()
+CRendererManager::CRendererManager(RendererType type)
     :
     m_pD3D(NULL),
     m_pD3DEx(NULL),
@@ -31,7 +31,8 @@ CRendererManager::CRendererManager()
     m_uHeight(1024),
     m_uNumSamples(0),
     m_fUseAlpha(false),
-    m_fSurfaceSettingsChanged(true)
+    m_fSurfaceSettingsChanged(true),
+    m_Type(type)
 {
 
 }
@@ -63,11 +64,11 @@ CRendererManager::~CRendererManager()
 //
 //------------------------------------------------------------------------------
 HRESULT
-CRendererManager::Create(CRendererManager** ppManager)
+CRendererManager::Create(CRendererManager** ppManager, RendererType type)
 {
     HRESULT hr = S_OK;
 
-    *ppManager = new CRendererManager();
+    *ppManager = new CRendererManager(type);
     IFCOOM(*ppManager);
 
 Cleanup:
@@ -97,9 +98,23 @@ CRendererManager::EnsureRenderers()
         IFCOOM(m_rgRenderers);
         ZeroMemory(m_rgRenderers, m_cAdapters * sizeof(m_rgRenderers[0]));
 
-        for (UINT i = 0; i < m_cAdapters; ++i)
+        if (m_Type == Triangle)
         {
-            IFC(CTriangleRenderer::Create(m_pD3D, m_pD3DEx, m_hwnd, i, &m_rgRenderers[i]));
+            for (UINT i = 0; i < m_cAdapters; ++i)
+            {
+                IFC(CTriangleRenderer::Create(m_pD3D, m_pD3DEx, m_hwnd, i, &m_rgRenderers[i]));
+            }
+        }
+        else if (m_Type == Rectangle)
+        {
+            for (UINT i = 0; i < m_cAdapters; ++i)
+            {
+                IFC(CRectangleRenderer::Create(m_pD3D, m_pD3DEx, m_hwnd, i, &m_rgRenderers[i]));
+            }
+        }
+        else
+        {
+            hr = S_FALSE;
         }
 
         // Default to the default adapter 
@@ -127,21 +142,25 @@ CRendererManager::EnsureHWND()
     if (!m_hwnd)
     {
         WNDCLASS wndclass;
-
-        wndclass.style = CS_HREDRAW | CS_VREDRAW;
-        wndclass.lpfnWndProc = DefWindowProc;
-        wndclass.cbClsExtra = 0;
-        wndclass.cbWndExtra = 0;
-        wndclass.hInstance = NULL;
-        wndclass.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-        wndclass.hCursor = LoadCursor(NULL, IDC_ARROW);
-        wndclass.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
-        wndclass.lpszMenuName = NULL;
-        wndclass.lpszClassName = szAppName;
-
-        if (!RegisterClass(&wndclass))
+        HINSTANCE hmod = GetModuleHandle(NULL);
+        BOOL ret = GetClassInfo(hmod, szAppName, &wndclass);
+        if (!ret)
         {
-            IFC(E_FAIL);
+            wndclass.style = CS_HREDRAW | CS_VREDRAW;
+            wndclass.lpfnWndProc = DefWindowProc;
+            wndclass.cbClsExtra = 0;
+            wndclass.cbWndExtra = 0;
+            wndclass.hInstance = NULL;
+            wndclass.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+            wndclass.hCursor = LoadCursor(NULL, IDC_ARROW);
+            wndclass.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+            wndclass.lpszMenuName = NULL;
+            wndclass.lpszClassName = szAppName;
+
+            if (!RegisterClass(&wndclass))
+            {
+                IFC(E_FAIL);
+            }
         }
 
         m_hwnd = CreateWindow(szAppName,

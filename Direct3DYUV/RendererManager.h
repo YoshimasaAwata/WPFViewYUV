@@ -5,7 +5,14 @@ class CRenderer;
 class CRendererManager
 {
 public:
-    static HRESULT Create(CRendererManager** ppManager);
+    enum RendererType
+    {
+        Triangle   = 0,
+        Rectangle  = 1
+    };
+
+public:
+    static HRESULT Create(CRendererManager** ppManager, RendererType type = Triangle);
     ~CRendererManager();
 
     HRESULT EnsureDevices();
@@ -20,7 +27,7 @@ public:
     HRESULT Render();
 
 private:
-    CRendererManager();
+    CRendererManager(RendererType type = Triangle);
 
     void CleanupInvalidDevices();
     HRESULT EnsureRenderers();
@@ -43,4 +50,6 @@ private:
     UINT m_uNumSamples;
     bool m_fUseAlpha;
     bool m_fSurfaceSettingsChanged;
+
+    RendererType m_Type;
 };

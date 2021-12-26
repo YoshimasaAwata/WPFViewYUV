@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "WPFViewYUV": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}

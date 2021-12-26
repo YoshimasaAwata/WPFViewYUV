@@ -25,9 +25,12 @@ namespace D3DHost
             InitializeComponent();
 
             // Set up the initial state for the D3DImage.
-            HRESULT.Check(SetSize(512, 512));
-            HRESULT.Check(SetAlpha(false));
-            HRESULT.Check(SetNumDesiredSamples(4));
+            HRESULT.Check(SetSize(512, 512, 0));
+            HRESULT.Check(SetAlpha(false, 0));
+            HRESULT.Check(SetNumDesiredSamples(4, 0));
+            HRESULT.Check(SetSize(512, 512, 1));
+            HRESULT.Check(SetAlpha(false, 1));
+            HRESULT.Check(SetNumDesiredSamples(4, 1));
 
             //
             // Optional: Subscribing to the IsFrontBufferAvailableChanged event.
@@ -46,6 +49,7 @@ namespace D3DHost
             // handle the IsFrontBufferAvailableChanged event.
             //
             CompositionTarget.Rendering += new EventHandler(CompositionTarget_Rendering);
+            CompositionTarget.Rendering += new EventHandler(CompositionTarget_Rendering2);
 
             //
             // Optional: Multi-adapter optimization
@@ -113,14 +117,16 @@ namespace D3DHost
 
         ~MainWindow()
         {
-            Destroy();
+            Destroy(0);
+            Destroy(1);
         }
 
         void AdapterTimer_Tick(object sender, EventArgs e)
         {
             POINT p = new POINT(imgelt.PointToScreen(new Point(0, 0)));
 
-            HRESULT.Check(SetAdapter(p));
+            HRESULT.Check(SetAdapter(p, 0));
+            HRESULT.Check(SetAdapter(p, 1));
         }
 
         void SizeTimer_Tick(object sender, EventArgs e)
@@ -137,7 +143,14 @@ namespace D3DHost
             if ((actualWidth > 0 && actualHeight > 0) &&
                 (actualWidth != (uint)d3dimg.Width || actualHeight != (uint)d3dimg.Height))
             {
-                HRESULT.Check(SetSize(actualWidth, actualHeight));
+                HRESULT.Check(SetSize(actualWidth, actualHeight, 0));
+            }
+            uint actualWidth2 = (uint)imgelt2.ActualWidth;
+            uint actualHeight2 = (uint)imgelt2.ActualHeight;
+            if ((actualWidth2 > 0 && actualHeight2 > 0) &&
+                (actualWidth2 != (uint)d3dimg2.Width || actualHeight2 != (uint)d3dimg2.Height))
+            {
+                HRESULT.Check(SetSize(actualWidth, actualHeight, 1));
             }
         }
 
@@ -150,18 +163,37 @@ namespace D3DHost
             if (d3dimg.IsFrontBufferAvailable && _lastRender != args.RenderingTime)
             {
                 IntPtr pSurface = IntPtr.Zero;
-                HRESULT.Check(GetBackBufferNoRef(out pSurface));
+                HRESULT.Check(GetBackBufferNoRef(out pSurface, 0));
                 if (pSurface != IntPtr.Zero)
                 {
                     d3dimg.Lock();
                     // Repeatedly calling SetBackBuffer with the same IntPtr is
                     // a no-op. There is no performance penalty.
                     d3dimg.SetBackBuffer(D3DResourceType.IDirect3DSurface9, pSurface);
-                    HRESULT.Check(Render());
+                    HRESULT.Check(Render(0));
                     d3dimg.AddDirtyRect(new Int32Rect(0, 0, d3dimg.PixelWidth, d3dimg.PixelHeight));
                     d3dimg.Unlock();
 
                     _lastRender = args.RenderingTime;
+                }
+            }
+        }
+
+        void CompositionTarget_Rendering2(object sender, EventArgs e)
+        {
+            if (d3dimg2.IsFrontBufferAvailable)
+            {
+                IntPtr pSurface = IntPtr.Zero;
+                HRESULT.Check(GetBackBufferNoRef(out pSurface, 1));
+                if (pSurface != IntPtr.Zero)
+                {
+                    d3dimg2.Lock();
+                    // Repeatedly calling SetBackBuffer with the same IntPtr is
+                    // a no-op. There is no performance penalty.
+                    d3dimg2.SetBackBuffer(D3DResourceType.IDirect3DSurface9, pSurface);
+                    HRESULT.Check(Render(1));
+                    d3dimg2.AddDirtyRect(new Int32Rect(0, 0, d3dimg2.PixelWidth, d3dimg2.PixelHeight));
+                    d3dimg2.Unlock();
                 }
             }
         }
@@ -173,16 +205,16 @@ namespace D3DHost
         // Import the methods exported by the unmanaged Direct3D content.
 
         [DllImport("Direct3DYUV.dll")]
-        static extern int GetBackBufferNoRef(out IntPtr pSurface);
+        static extern int GetBackBufferNoRef(out IntPtr pSurface, int type);
 
         [DllImport("Direct3DYUV.dll")]
-        static extern int SetSize(uint width, uint height);
+        static extern int SetSize(uint width, uint height, int type);
 
         [DllImport("Direct3DYUV.dll")]
-        static extern int SetAlpha(bool useAlpha);
+        static extern int SetAlpha(bool useAlpha, int type);
 
         [DllImport("Direct3DYUV.dll")]
-        static extern int SetNumDesiredSamples(uint numSamples);
+        static extern int SetNumDesiredSamples(uint numSamples, int type);
 
         [StructLayout(LayoutKind.Sequential)]
         struct POINT
@@ -198,13 +230,13 @@ namespace D3DHost
         }
 
         [DllImport("Direct3DYUV.dll")]
-        static extern int SetAdapter(POINT screenSpacePoint);
+        static extern int SetAdapter(POINT screenSpacePoint, int type);
 
         [DllImport("Direct3DYUV.dll")]
-        static extern int Render();
+        static extern int Render(int type);
 
         [DllImport("Direct3DYUV.dll")]
-        static extern void Destroy();
+        static extern void Destroy(int type);
     }
 
     public static class HRESULT
