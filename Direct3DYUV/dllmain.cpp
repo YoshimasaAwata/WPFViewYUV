@@ -96,3 +96,18 @@ extern "C" void WINAPI Destroy(int type)
     delete pManager[type];
     pManager[type] = NULL;
 }
+
+extern "C" void WINAPI OpenYUVFile(const char* pFileName, int type)
+{
+    if (1 == type)
+    {
+        HRESULT hr = S_OK;
+
+        IFC(EnsureRendererManager(1));
+
+        pManager[1]->OpenFile(pFileName);
+    }
+
+Cleanup:
+    return;
+}

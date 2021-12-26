@@ -26,6 +26,8 @@ public:
 
     HRESULT Render();
 
+    void OpenFile(const char* pFileName);
+
 private:
     CRendererManager(RendererType type = Triangle);
 

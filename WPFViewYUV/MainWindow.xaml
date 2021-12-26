@@ -29,7 +29,7 @@
                 <ColumnDefinition Width="45"/>
             </Grid.ColumnDefinitions>
             <TextBlock x:Name="filename" Height="13" Background="White" Margin="5" />
-            <Button x:Name="openbutton" Content="File…" HorizontalAlignment="Right" Margin="5" Grid.Column="1" Width="35"/>
+            <Button x:Name="openbutton" Content="File…" HorizontalAlignment="Right" Margin="5" Grid.Column="1" Width="35" Click="openbutton_Click"/>
             <Button x:Name="playbutton" Content="Play" HorizontalAlignment="Right" Margin="5" Grid.Column="2" Width="35" IsEnabled="False"/>
         </Grid>
     </Grid>

@@ -49,7 +49,7 @@ namespace D3DHost
             // handle the IsFrontBufferAvailableChanged event.
             //
             CompositionTarget.Rendering += new EventHandler(CompositionTarget_Rendering);
-            CompositionTarget.Rendering += new EventHandler(CompositionTarget_Rendering2);
+//            CompositionTarget.Rendering += new EventHandler(CompositionTarget_Rendering2);
 
             //
             // Optional: Multi-adapter optimization
@@ -237,6 +237,26 @@ namespace D3DHost
 
         [DllImport("Direct3DYUV.dll")]
         static extern void Destroy(int type);
+
+        [DllImport("Direct3DYUV.dll")]
+        static extern void OpenYUVFile(string filename, int type);
+
+        private void openbutton_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog();
+            dialog.Title = "YUVファイルの選択";
+            dialog.Filter = "YUVァイル (*.yuv)|*.yuv";
+            dialog.CheckFileExists = true;
+
+            // ダイアログを表示する
+            if (dialog.ShowDialog() == true)
+            {
+                OpenYUVFile(dialog.FileName, 1);
+                filename.Text = dialog.FileName;
+                playbutton.IsEnabled = true;
+                CompositionTarget_Rendering2(sender, e);
+            }
+        }
     }
 
     public static class HRESULT

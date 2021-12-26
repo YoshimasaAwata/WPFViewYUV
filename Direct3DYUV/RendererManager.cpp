@@ -525,3 +525,26 @@ CRendererManager::Render()
 {
     return m_pCurrentRenderer ? m_pCurrentRenderer->Render() : S_OK;
 }
+
+//+-----------------------------------------------------------------------------
+//
+//  Member:
+//      CRendererManager::OpenFile
+//
+//  Synopsis:
+//      Forward to the current renderer
+//
+//------------------------------------------------------------------------------
+void CRendererManager::OpenFile(const char* pFileName)
+{
+    if (m_Type == Rectangle)
+    {
+        HRESULT hr = S_OK;
+        IFC(EnsureD3DObjects());
+        IFC(EnsureRenderers());
+        reinterpret_cast<CRectangleRenderer*>(m_pCurrentRenderer)->OpenFile(pFileName);
+    }
+
+Cleanup:
+    return;
+}
