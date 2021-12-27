@@ -60,4 +60,7 @@
     </None>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup>
+    <CopyFileToFolders Include="Shader.fx" />
+  </ItemGroup>
 </Project>

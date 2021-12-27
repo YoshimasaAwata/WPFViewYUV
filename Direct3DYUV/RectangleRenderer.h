@@ -24,15 +24,25 @@ protected:
 
     virtual HRESULT ReadYUV();
 
-    virtual void YUV2RGB(UINT* pRGB, UINT stride);
+    virtual HRESULT YUV2Tex();
 
     virtual HRESULT EnsureTexture();
+
+    virtual HRESULT EnsureEffect();
 
 private:
     CRectangleRenderer();
 
     IDirect3DVertexBuffer9* m_pd3dVBPos;
-    IDirect3DTexture9* m_pd3dTex;
+    IDirect3DTexture9* m_pd3dTexY;
+    IDirect3DTexture9* m_pd3dTexU;
+    IDirect3DTexture9* m_pd3dTexV;
+    ID3DXEffect* m_pFX;
+    D3DXHANDLE m_hTech;
+    D3DXHANDLE m_hWvp;
+    D3DXHANDLE m_hTextureY;
+    D3DXHANDLE m_hTextureU;
+    D3DXHANDLE m_hTextureV;
 
     std::ifstream* m_pYUVFile;
     BYTE* m_pY;

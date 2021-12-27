@@ -28,7 +28,14 @@ struct CUSTOMVERTEX
 CRectangleRenderer::CRectangleRenderer() :
 	CRenderer(),
 	m_pd3dVBPos(NULL),
-    m_pd3dTex(NULL),
+    m_pd3dTexY(NULL),
+    m_pd3dTexU(NULL),
+    m_pd3dTexV(NULL),
+    m_pFX(NULL),
+    m_hWvp(NULL),
+    m_hTextureY(0),
+    m_hTextureU(0),
+    m_hTextureV(0),
     m_pYUVFile(nullptr),
     m_pY(nullptr),
     m_pU(nullptr),
@@ -49,7 +56,10 @@ CRectangleRenderer::~CRectangleRenderer()
 {
     CloseFile();
     SAFE_RELEASE(m_pd3dVBPos);
-    SAFE_RELEASE(m_pd3dTex);
+    SAFE_RELEASE(m_pFX);
+    SAFE_RELEASE(m_pd3dTexY);
+    SAFE_RELEASE(m_pd3dTexU);
+    SAFE_RELEASE(m_pd3dTexV);
     delete[] m_pY;
     delete[] m_pU;
     delete[] m_pV;
@@ -95,7 +105,7 @@ Cleanup:
 HRESULT CRectangleRenderer::Init(IDirect3D9* pD3D, IDirect3D9Ex* pD3DEx, HWND hwnd, UINT uAdapter)
 {
     HRESULT hr = S_OK;
-    D3DXMATRIXA16 matView, matProj;
+    D3DXMATRIXA16 matView, matProj, mat;
     D3DXVECTOR3 vEyePt(0.0f, 0.0f, -5.0f);
     D3DXVECTOR3 vLookatPt(0.0f, 0.0f, 0.0f);
     D3DXVECTOR3 vUpVec(0.0f, 1.0f, 0.0f);
@@ -112,7 +122,9 @@ HRESULT CRectangleRenderer::Init(IDirect3D9* pD3D, IDirect3D9Ex* pD3DEx, HWND hw
     // Call base to create the device and render target
     IFC(CRenderer::Init(pD3D, pD3DEx, hwnd, uAdapter));
 
-    IFC(m_pd3dDevice->CreateVertexBuffer(sizeof(vertices), 0, D3DFVF_CUSTOMVERTEX, D3DPOOL_DEFAULT, &m_pd3dVBPos, NULL));
+    IFC(EnsureEffect());
+
+    IFC(m_pd3dDevice->CreateVertexBuffer(sizeof(vertices), D3DUSAGE_WRITEONLY, D3DFVF_CUSTOMVERTEX, D3DPOOL_DEFAULT, &m_pd3dVBPos, NULL));
 
     void* pVertices;
     IFC(m_pd3dVBPos->Lock(0, sizeof(vertices), &pVertices, 0));
@@ -121,9 +133,15 @@ HRESULT CRectangleRenderer::Init(IDirect3D9* pD3D, IDirect3D9Ex* pD3DEx, HWND hw
 
     // Set up the camera
     D3DXMatrixLookAtLH(&matView, &vEyePt, &vLookatPt, &vUpVec);
-    IFC(m_pd3dDevice->SetTransform(D3DTS_VIEW, &matView));
     D3DXMatrixOrthoLH(&matProj, CIF_WIDTH, CIF_WIDTH, 1.0f, 100.0f);
-    IFC(m_pd3dDevice->SetTransform(D3DTS_PROJECTION, &matProj));
+
+    // テクニックの設定（シェーダプログラムの設定）
+    IFC(m_pFX->SetTechnique(m_hTech));
+
+    // シェーダーのグローバル変数の値の設定
+    mat = matView * matProj;
+    IFC(m_pFX->SetMatrix(m_hWvp, &mat));
+    IFC(m_pFX->CommitChanges());
 
     // Set up the global state
     IFC(m_pd3dDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE));
@@ -160,8 +178,15 @@ HRESULT CRectangleRenderer::Render()
         0
     ));
 
-    IFC(m_pd3dDevice->SetTexture(0, m_pd3dTex));
+    /* シェーダプログラムの開始宣言 */
+    IFC(m_pFX->Begin(0, 0));
+    IFC(m_pFX->BeginPass(0));
+
     IFC(m_pd3dDevice->DrawPrimitive(D3DPT_TRIANGLEFAN, 0, 2));
+
+    /* シェーダプログラムの終了宣言 */
+    IFC(m_pFX->EndPass());
+    IFC(m_pFX->End());
 
     IFC(m_pd3dDevice->EndScene());
 
@@ -237,47 +262,55 @@ HRESULT CRectangleRenderer::ReadYUV()
 //+-----------------------------------------------------------------------------
 //
 //  Member:
-//      CRectangleRenderer::YUV2RGB
+//      CRectangleRenderer::YUV2Tex
 //
 //  Synopsis:
-//      Transform yuv data to rgb data and set to texture buffer
+//      Set yuv data to texture
 //
 //------------------------------------------------------------------------------
-void CRectangleRenderer::YUV2RGB(UINT* pRGB, UINT stride)
+HRESULT CRectangleRenderer::YUV2Tex()
 {
-    const XMVECTOR DIFF = { (16.0f / 255), (128.0f / 255), (128.0f / 255), 0.0f };
-    const XMVECTOR MIN  = { 0.0f, -0.5f, -0.5f, 1.0f };
-    const XMVECTOR MAX  = { 1.0f, 0.5f, 0.5f, 1.0f };
+    HRESULT hr = S_OK;
+    BYTE* pdst;
+    BYTE* psrc;
+    D3DLOCKED_RECT locked;
+    IFC(ReadYUV());
 
+    IFC(m_pd3dTexY->LockRect(0, &locked, NULL, 0));
+    psrc = m_pY;
+    pdst = static_cast<BYTE*>(locked.pBits);
     for (int h = 0; h < CIF_HEIGHT; h++)
     {
-        int y_pos = h * CIF_WIDTH;
-        int uv_pos = (h / 2) * (CIF_WIDTH / 2);
-        int rgb_pos = h * stride;
-
-        for (int w = 0; w < CIF_WIDTH; w++)
-        {
-            XMVECTOR yuvw =
-            {
-                static_cast<float>(m_pY[y_pos + w]),
-                static_cast<float>(m_pU[uv_pos + (w / 2)]),
-                static_cast<float>(m_pV[uv_pos + (w / 2)]),
-                1.0f
-            };
-            yuvw /= 255.0f;
-            yuvw -= DIFF;
-            yuvw = XMVectorMin(yuvw, MAX);
-            yuvw = XMVectorMax(yuvw, MIN);
-            XMVECTOR rgba = XMColorYUVToRGB(yuvw);
-            rgba = XMVectorSaturate(rgba);
-            rgba *= 255.0f;
-            rgba = XMVectorTruncate(rgba);
-            UINT r = static_cast<UINT>(XMVectorGetX(rgba));
-            UINT g = static_cast<UINT>(XMVectorGetY(rgba));
-            UINT b = static_cast<UINT>(XMVectorGetZ(rgba));
-            pRGB[rgb_pos + w] = (r << 16) | (g << 8) | b;
-        }
+        memcpy(pdst, psrc, CIF_WIDTH);
+        psrc += CIF_WIDTH;
+        pdst += locked.Pitch;
     }
+    IFC(m_pd3dTexY->UnlockRect(0));
+
+    IFC(m_pd3dTexU->LockRect(0, &locked, NULL, 0));
+    psrc = m_pU;
+    pdst = static_cast<BYTE*>(locked.pBits);
+    for (int h = 0; h < (CIF_HEIGHT / 2); h++)
+    {
+        memcpy(pdst, psrc, (CIF_WIDTH / 2));
+        psrc += CIF_WIDTH / 2;
+        pdst += locked.Pitch;
+    }
+    IFC(m_pd3dTexU->UnlockRect(0));
+
+    IFC(m_pd3dTexV->LockRect(0, &locked, NULL, 0));
+    psrc = m_pV;
+    pdst = static_cast<BYTE*>(locked.pBits);
+    for (int h = 0; h < (CIF_HEIGHT / 2); h++)
+    {
+        memcpy(pdst, psrc, (CIF_WIDTH / 2));
+        psrc += CIF_WIDTH / 2;
+        pdst += locked.Pitch;
+    }
+    IFC(m_pd3dTexV->UnlockRect(0));
+
+Cleanup:
+    return hr;
 }
 
 //+-----------------------------------------------------------------------------
@@ -293,27 +326,120 @@ HRESULT CRectangleRenderer::EnsureTexture()
 {
     HRESULT hr = S_OK;
 
-    if (nullptr == m_pd3dTex)
+    if (nullptr == m_pd3dTexY)
     {
         IFC(m_pd3dDevice->CreateTexture(
             CIF_WIDTH,
             CIF_HEIGHT,
             1,
             D3DUSAGE_DYNAMIC,
-            D3DFMT_X8R8G8B8,
+            D3DFMT_L8,
             D3DPOOL_DEFAULT,
-            &m_pd3dTex,
+            &m_pd3dTexY,
             NULL
         ));
+        IFC(m_pFX->SetTexture(m_hTextureY, m_pd3dTexY));
+        IFC(m_pFX->CommitChanges());
+    }
+    if (nullptr == m_pd3dTexU)
+    {
+        IFC(m_pd3dDevice->CreateTexture(
+            (CIF_WIDTH / 2),
+            (CIF_HEIGHT / 2),
+            1,
+            D3DUSAGE_DYNAMIC,
+            D3DFMT_L8,
+            D3DPOOL_DEFAULT,
+            &m_pd3dTexU,
+            NULL
+        ));
+        IFC(m_pFX->SetTexture(m_hTextureU, m_pd3dTexU));
+        IFC(m_pFX->CommitChanges());
+    }
+    if (nullptr == m_pd3dTexV)
+    {
+        IFC(m_pd3dDevice->CreateTexture(
+            (CIF_WIDTH / 2),
+            (CIF_HEIGHT / 2),
+            1,
+            D3DUSAGE_DYNAMIC,
+            D3DFMT_L8,
+            D3DPOOL_DEFAULT,
+            &m_pd3dTexV,
+            NULL
+        ));
+        IFC(m_pFX->SetTexture(m_hTextureV, m_pd3dTexV));
+        IFC(m_pFX->CommitChanges());
     }
 
-    IFC(ReadYUV());
+    IFC(YUV2Tex());
 
-    D3DLOCKED_RECT locked;
-    IFC(m_pd3dTex->LockRect(0, &locked, NULL, 0));
-    YUV2RGB(static_cast<UINT*>(locked.pBits), locked.Pitch / sizeof(UINT));
-    hr = m_pd3dTex->UnlockRect(0);
+    //HRESULT hr = S_OK;
+
+    //if (nullptr == m_pd3dTex)
+    //{
+    //    IFC(m_pd3dDevice->CreateTexture(
+    //        CIF_WIDTH,
+    //        CIF_HEIGHT,
+    //        1,
+    //        D3DUSAGE_DYNAMIC,
+    //        D3DFMT_X8R8G8B8,
+    //        D3DPOOL_DEFAULT,
+    //        &m_pd3dTex,
+    //        NULL
+    //    ));
+    //}
+
+    //IFC(ReadYUV());
+
+    //D3DLOCKED_RECT locked;
+    //IFC(m_pd3dTex->LockRect(0, &locked, NULL, 0));
+    //YUV2RGB(static_cast<UINT*>(locked.pBits), locked.Pitch / sizeof(UINT));
+    //hr = m_pd3dTex->UnlockRect(0);
 
 Cleanup:
+    return hr;
+}
+
+//+-----------------------------------------------------------------------------
+//
+//  Member:
+//      CRectangleRenderer::EnsureEffect
+//
+//  Synopsis:
+//      Read and compile hlsl file and get handles for global variables
+//
+//------------------------------------------------------------------------------
+HRESULT CRectangleRenderer::EnsureEffect()
+{
+    HRESULT hr = S_OK;
+    ID3DXBuffer* perrors = NULL;
+    IFC(D3DXCreateEffectFromFile(
+        m_pd3dDevice,
+        L"Shader.fx",
+        NULL,
+        NULL,
+        D3DXSHADER_DEBUG,
+        NULL,
+        &m_pFX,
+        &perrors));
+
+    // シェーダプログラムへテクニックへのハンドルの取得
+    m_hTech = m_pFX->GetTechniqueByName("BasicTech");
+
+    // シェーダープログラムのグローバル変数のハンドルの取得
+    m_hWvp = m_pFX->GetParameterByName(0, "g_wvp");
+    m_hTextureY = m_pFX->GetParameterByName(0, "g_texy");
+    m_hTextureU = m_pFX->GetParameterByName(0, "g_texu");
+    m_hTextureV = m_pFX->GetParameterByName(0, "g_texv");
+
+Cleanup:
+    if ((hr != S_OK) && (perrors != NULL))
+    {
+        char* pdbcode = new char[perrors->GetBufferSize() + 1];
+        memcpy_s(pdbcode, perrors->GetBufferSize() + 1, perrors->GetBufferPointer(), perrors->GetBufferSize());
+        OutputDebugStringA(pdbcode);
+        delete[] pdbcode;
+    }
     return hr;
 }
