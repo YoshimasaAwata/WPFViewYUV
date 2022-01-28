@@ -1,6 +1,6 @@
 # WPFViewYUV
 Direct3Dを使用した、YUV⇒RGB変換、動画表示のサンプルコードです。  
-最終的にはHSLSを用いてGPU側でYUV⇒RGB変換を行っています。  
+最終的にはHLSLを用いてGPU側でYUV⇒RGB変換を行っています。  
 Visual Studio 2022を使用しています。  
 
 YUVのファイルは  
